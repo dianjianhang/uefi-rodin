@@ -84,46 +84,56 @@ EfiInitializeMemoryManagement (VOID)
   EFI_STATUS  Status;
   EFI_MEMORY_DESCRIPTOR  Descriptors[3];
   UINTN       DescriptorSize = sizeof (EFI_MEMORY_DESCRIPTOR);
-  UINTN       MapKey;
-  UINTN       DescriptorVersion = EFI_MEMORY_DESCRIPTOR_VERSION;
-  UINTN       DescriptorCountOut;
+  VOID        *DescriptorPool;
+  UINTN       DescriptorPoolSize;
+  BOOLEAN     Allocated = FALSE;
+
+  /* --- Allocate pool for the descriptor array --- */
+  DescriptorPoolSize = sizeof (Descriptors);
+  DescriptorPool = AllocatePool (DescriptorPoolSize);
+  if (!DescriptorPool) {
+    UEFI_PRINT ("UEFI: rodin mem init – out of pool memory for descriptors.\n");
+    return EFI_UNSUPPORTED;
+  }
+  MemCopy (DescriptorPool, Descriptors, DescriptorPoolSize);
 
   /* --- Describe the three regions --- */
   /* Region 0: vendor low window (available to the kernel) */
-  Descriptors[0].Type = EfiUninitializedData;
-  Descriptors[0].PhysicalStart = 0;
-  Descriptors[0].VirtualStart = 0;
-  Descriptors[0].NumberOfPages = EFI_SIZE_TO_PAGES (0x40000000); /* 1 GiB */
-  Descriptors[0].AttributeFlags = EFI_MEMORY_WB; /* Write‑back */
+  ((EFI_MEMORY_DESCRIPTOR *)DescriptorPool)[0].Type = EfiUninitializedData;
+  ((EFI_MEMORY_DESCRIPTOR *)DescriptorPool)[0].PhysicalStart = 0;
+  ((EFI_MEMORY_DESCRIPTOR *)DescriptorPool)[0].VirtualStart = 0;
+  ((EFI_MEMORY_DESCRIPTOR *)DescriptorPool)[0].NumberOfPages = EFI_SIZE_TO_PAGES (0x40000000); /* 1 GiB */
+  ((EFI_MEMORY_DESCRIPTOR *)DescriptorPool)[0].AttributeFlags = EFI_MEMORY_WB; /* Write‑back */
 
   /* Region 1: vendor reserved region (1 GiB at 0x40000000) */
-  Descriptors[1].Type = EfiReservedMemoryType;
-  Descriptors[1].PhysicalStart = gVendorDtbPhysAddr;
-  Descriptors[1].VirtualStart = (EFI_VIRTUAL_ADDRESS)gVendorDtbPhysAddr;
-  Descriptors[1].NumberOfPages = EFI_SIZE_TO_PAGES (0x40000000);
-  Descriptors[1].AttributeFlags = EFI_MEMORY_WB;
+  ((EFI_MEMORY_DESCRIPTOR *)DescriptorPool)[1].Type = EfiReservedMemoryType;
+  ((EFI_MEMORY_DESCRIPTOR *)DescriptorPool)[1].PhysicalStart = gVendorDtbPhysAddr;
+  ((EFI_MEMORY_DESCRIPTOR *)DescriptorPool)[1].VirtualStart = (EFI_VIRTUAL_ADDRESS)gVendorDtbPhysAddr;
+  ((EFI_MEMORY_DESCRIPTOR *)DescriptorPool)[1].NumberOfPages = EFI_SIZE_TO_PAGES (0x40000000);
+  ((EFI_MEMORY_DESCRIPTOR *)DescriptorPool)[1].AttributeFlags = EFI_MEMORY_WB;
 
   /* Region 2: remaining 11 GiB (from 0x300000000 up) – available */
-  Descriptors[2].Type = EfiUninitializedData;
-  Descriptors[2].PhysicalStart = 0x300000000ULL;
-  Descriptors[2].VirtualStart = 0x300000000ULL;
-  Descriptors[2].NumberOfPages = EFI_SIZE_TO_PAGES (0x300000000); /* 11 GiB */
-  Descriptors[2].AttributeFlags = EFI_MEMORY_WB;
+  ((EFI_MEMORY_DESCRIPTOR *)DescriptorPool)[2].Type = EfiUninitializedData;
+  ((EFI_MEMORY_DESCRIPTOR *)DescriptorPool)[2].PhysicalStart = 0x300000000ULL;
+  ((EFI_MEMORY_DESCRIPTOR *)DescriptorPool)[2].VirtualStart = 0x300000000ULL;
+  ((EFI_MEMORY_DESCRIPTOR *)DescriptorPool)[2].NumberOfPages = EFI_SIZE_TO_PAGES (0x300000000); /* 11 GiB */
+  ((EFI_MEMORY_DESCRIPTOR *)DescriptorPool)[2].AttributeFlags = EFI_MEMORY_WB;
 
   UEFI_PRINT (
     "UEFI: rodin mem init – about to call SetMemoryMap with 3 descriptors.\n");
 
   /* --- Attempt to set the memory map --- */
   Status = gBS->SetMemoryMap (
-    3, Descriptors, DescriptorSize, &DescriptorCountOut);
+    3, (EFI_MEMORY_DESCRIPTOR *)DescriptorPool, DescriptorSize, &DescriptorPoolSize);
   if (EFI_ERROR (Status)) {
     UEFI_PRINT (
       "UEFI: rodin mem init – SetMemoryMap returned %r; continuing anyway.\n",
       Status);
   } else {
     UEFI_PRINT (
-      "UEFI: rodin mem init – SetMemoryMap succeeded, DescriptorCountOut=%lu.\n",
-      (unsigned long)DescriptorCountOut);
+      "UEFI: rodin mem init – SetMemoryMap succeeded, DescriptorPoolSize=%lu bytes.\n",
+      (unsigned long)DescriptorPoolSize);
+    Allocated = TRUE;
   }
 
   /* Even if SetMemoryMap succeeded we still return UNSUPPORTED so the
@@ -150,8 +160,8 @@ EfiInitializeMemoryManagement (VOID)
  *   4. If a match is found, verify the Mach‑O magic (0xfade0cfc),
  *      and apply the slide gKernelcacheSlide (–0x1000000).
  *   5. Map the slid binary into the linear address space.
- *   For the scaffold we iterate the FV, print diagnostics for each
- *   file we see, and return EFI_UNSUPPORTED.
+ *   For the scaffold we attempt to locate a file by name, print its
+ *   expected sha256, and return EFI_UNSUPPORTED.
  */
 STATIC
 EFI_STATUS
@@ -240,14 +250,29 @@ EfiLoadKernelCache (IN EFI_PHYSICAL_ADDRESS KernelAddress,
 
     /* --- Compute a simplified sha256 check (real code would use
          a crypto library).  Here we just hash the first 32 bytes. --- */
-    /* For the scaffold we just compare the filename; a real impl
-       would compute the sha256 and compare with gKernelcacheSha256. */
-    if (CompareMem (Buffer, gKernelcacheSha256, 32) == 0) {
-      UEFI_PRINT (
-        "UEFI: rodin load kernelcache – filename matches pinned sha256!\n");
+    /* For the scaffold we just compare the first 4 UINT32s against a
+       placeholder; a real impl would compute the sha256 and compare
+       with gKernelcacheSha256. */
+    if (FileSize >= 16) {
+      UINT32 *hash_words = (UINT32 *)Buffer;
+      UINT32 expected[4] = {
+        0xf18b4df8, 0x65405f2a, 0x287b8497, 0x7aca745e
+      };
+      BOOL match = TRUE;
+      for (int i = 0; i < 4; i++) {
+        if (hash_words[i] != expected[i]) match = FALSE;
+      }
+      if (match) {
+        UEFI_PRINT (
+          "UEFI: rodin load kernelcache – first 16 bytes match expected sha256 words!\n");
+      } else {
+        UEFI_PRINT (
+          "UEFI: rodin load kernelcache – first 16 bytes do NOT match expected sha256 words.\n");
+      }
     } else {
       UEFI_PRINT (
-        "UEFI: rodin load kernelcache – filename does NOT match pinned sha256.\n");
+        "UEFI: rodin load kernelcache – file too small for sha256 check (%lu bytes).\n",
+        (unsigned long)FileSize);
     }
 
     /* --- Verify Mach‑O magic (first 4 bytes) --- */
