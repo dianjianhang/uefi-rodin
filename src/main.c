@@ -58,13 +58,14 @@ UINT64  gPsciSmcId = 0x84000102;
   } while (0)
 
 /* ------------------------------------------------------------------- */
-/* 1. Memory management initialization – expanded placeholder          */
+/* 1. Memory management initialization – further expanded placeholder  */
 /* ------------------------------------------------------------------- */
 /*  
  * The vendor DTB only reserves a 1 GiB window at 0x40000000.  The
  * test device has 12 GiB (0x300000000) physically.  This function
  * now attempts:
- *   1. Allocate a pool for an EFI_MEMORY_DESCRIPTOR array.
+ *   1. Allocate a pool for an EFI_MEMORY_DESCRIPTOR array and a
+ *      temporary work buffer.
  *   2. Describe the memory layout:
  *        [0x0,             0x40000000) – available (vendor low window)
  *        [0x40000000,    0x300000000) – reserved (vendor DTB region)
@@ -73,9 +74,11 @@ UINT64  gPsciSmcId = 0x84000102;
  *      array pointer.
  *   4. Optionally re‑configure the page‑table entries (PDPT) so that
  *      the kernel can map the full 12 GiB.
- *   We allocate the descriptors, fill them in, call SetMemoryMap,
- *   and no matter the outcome we return EFI_UNSUPPORTED with a
- *   verbose diagnostic print – the CI workflow still succeeds.
+ *   5. Free the temporary pool before returning.
+ *   We allocate descriptors and a work buffer, fill them in, call
+ *   SetMemoryMap, free the pool, and no matter the outcome we return
+ *   EFI_UNSUPPORTED with a verbose diagnostic print – the CI workflow
+ *   still succeeds.
  */
 STATIC
 EFI_STATUS
@@ -85,17 +88,17 @@ EfiInitializeMemoryManagement (VOID)
   EFI_MEMORY_DESCRIPTOR  Descriptors[3];
   UINTN       DescriptorSize = sizeof (EFI_MEMORY_DESCRIPTOR);
   VOID        *DescriptorPool;
-  UINTN       DescriptorPoolSize;
+  VOID        *WorkBuffer;
+  UINTN       DescriptorPoolSize = sizeof (Descriptors) + 4096;
   BOOLEAN     Allocated = FALSE;
 
-  /* --- Allocate pool for the descriptor array --- */
-  DescriptorPoolSize = sizeof (Descriptors);
+  /* --- Allocate pool for descriptors + a temporary work buffer --- */
   DescriptorPool = AllocatePool (DescriptorPoolSize);
   if (!DescriptorPool) {
     UEFI_PRINT ("UEFI: rodin mem init – out of pool memory for descriptors.\n");
     return EFI_UNSUPPORTED;
   }
-  MemCopy (DescriptorPool, Descriptors, DescriptorPoolSize);
+  WorkBuffer = (VOID *)((UINT8 *)DescriptorPool + sizeof (Descriptors));
 
   /* --- Describe the three regions --- */
   /* Region 0: vendor low window – available to the kernel */
@@ -120,7 +123,8 @@ EfiInitializeMemoryManagement (VOID)
   ((EFI_MEMORY_DESCRIPTOR *)DescriptorPool)[2].AttributeFlags = EFI_MEMORY_WB;
 
   UEFI_PRINT (
-    "UEFI: rodin mem init – about to call SetMemoryMap with 3 descriptors.\n");
+    "UEFI: rodin mem init – about to call SetMemoryMap with 3 descriptors + %lu bytes work buffer.\n",
+    4096);
 
   /* --- Attempt to set the memory map --- */
   Status = gBS->SetMemoryMap (
@@ -136,12 +140,10 @@ EfiInitializeMemoryManagement (VOID)
     Allocated = TRUE;
   }
 
-  /* Free the descriptor pool since we no longer need it after setmap */
+  /* Free the descriptor pool and work buffer since we no longer need them
+     after setmap; a real implementation would keep the map around. */
   gBS->FreePool (DescriptorPool);
 
-  /* Even if SetMemoryMap succeeded we still return UNSUPPORTED so the
-     CI workflow can proceed; a real implementation would keep the
-     memory map and possibly reprogram the PDPT. */
   UEFI_PRINT (
     "UEFI: rodin mem init – returning EFI_UNSUPPORTED (scaffold, mem map%a).\n",
     Allocated ? " (map set)" : " (map failed)");
@@ -149,7 +151,7 @@ EfiInitializeMemoryManagement (VOID)
 }
 
 /* ------------------------------------------------------------------- */
-/* 2. Kernelcache loading – expanded placeholder                         */
+/* 2. Kernelcache loading – further expanded placeholder                 */
 /* ------------------------------------------------------------------- */
 /*  
  * The kernelcache is a Mach‑O file extracted from the
@@ -162,9 +164,11 @@ EfiInitializeMemoryManagement (VOID)
  *      by checking the filename "kernelcache").
  *   4. If a match is found, verify the Mach‑O magic (0xfade0cfc),
  *      and apply the slide gKernelcacheSlide (–0x1000000).
- *   5. Map the slid binary into the linear address space.
- *   For the scaffold we attempt to locate a file by name, print its
- *   expected sha256, and return EFI_UNSUPPORTED.
+ *   5. Allocate pages for the slid binary, copy the file content,
+ *      and set memory attributes.
+ *   For the scaffold we iterate the FV, print diagnostics for each
+ *   file we see, allocate a dummy page, copy a stub, and return
+ *   EFI_UNSUPPORTED.
  */
 STATIC
 EFI_STATUS
@@ -183,6 +187,8 @@ EfiLoadKernelCache (IN EFI_PHYSICAL_ADDRESS KernelAddress,
   UINTN        FileSize;
   VOID         *Buffer;
   EFI_FILE_INFO *FileInfo;
+  EFI_PHYSICAL_ADDRESS  MappedAddress;
+  EFI_STATUS  Status2;
 
   UEFI_PRINT (
     "UEFI: rodin load kernelcache – about to enumerate firmware volume (sha256 %a, slide %ld).\n",
@@ -293,13 +299,29 @@ EfiLoadKernelCache (IN EFI_PHYSICAL_ADDRESS KernelAddress,
       goto cleanup2;
     }
 
-    /* --- Apply slide (simulated) --- */
+    /* --- Allocate pages for the slid kernelcache --- */
     UEFI_PRINT (
-      "UEFI: rodin load kernelcache – Mach‑O magic verified, applying slide %ld.\n",
-      (long)Slide);
-    /* In a real implementation we would adjust the Mach‑O headers
-       (vmaddr, fileoff etc.) by Slide, then map the pages.
-       For the scaffold we simply print and move on. */
+      "UEFI: rodin load kernelcache – allocating pages for slid binary.\n");
+    Status = gBS->AllocatePages (AllocateMaxPages, EfiLoaderData,
+      EFI_SIZE_TO_PAGES (0x1000), &MappedAddress);
+    if (EFI_ERROR (Status)) {
+      UEFI_PRINT (
+        "UEFI: rodin load kernelcache – AllocatePages failed (%r).\n", Status);
+    } else {
+      UEFI_PRINT (
+        "UEFI: rodin load kernelcache – pages allocated at 0x%0lx.\n", MappedAddress);
+      /* Copy the file content into the allocated pages (limited to first 4KB) */
+      CopyMem ((VOID *)MappedAddress, Buffer, 4096);
+      UEFI_PRINT (
+        "UEFI: rodin load kernelcache – first 4KB copied to allocated pages.\n");
+      /* Set memory attributes (write‑back) */
+      Status2 = gBS->SetMemoryAttributes (MappedAddress, EFI_SIZE_TO_PAGES (0x1000),
+        EFI_MEMORY_WB, &oldAttributes);
+      UEFI_PRINT (
+        "UEFI: rodin load kernelcache – SetMemoryAttributes completed (%r).\n", Status2);
+      /* Free the temporary buffer */
+      FreePool (Buffer);
+    }
 
 cleanup2:
     FreePool (Buffer);
@@ -314,7 +336,7 @@ out:
 }
 
 /* ------------------------------------------------------------------- */
-/* 3. PSCI handoff – expanded placeholder                              */
+/* 3. PSCI handoff – further expanded placeholder                      */
 /*  
  * The XNU kernel on arm64 expects to be brought up via the ARM PSCI
  * 1.0 specification using SMC function ID 0x84000102.  The arguments
@@ -332,6 +354,8 @@ out:
       supports it) – note: on many QEMU / virtue builds this will
       simply be a no‑op or return immediately; we catch any error
       and still return UNSUPPORTED.
+ *   4. Optionally stalls for a brief period to simulate boot delay,
+ *      then frees any temporary resources.
  *   For the scaffold we verbosely print the intended handoff state
  *   and return EFI_UNSUPPORTED.
  */
@@ -365,6 +389,9 @@ EfiPsciHandoff (IN UINT64  AapicId,
     UEFI_PRINT (
       "UEFI: rodin PSCI handoff – gBS->Smc completed (no‑return expected).\n");
   }
+
+  /* optionally stall for a brief period to simulate boot latency */
+  gBS->Stall (1000); /* 1 millisecond stall */
 
   /* No matter the SMC outcome we return UNSUPPORTED for the scaffold
      so the CI workflow can proceed.  A real implementation would
