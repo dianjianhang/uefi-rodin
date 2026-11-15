@@ -320,6 +320,11 @@ EfiLoadKernelCache (IN EFI_PHYSICAL_ADDRESS KernelAddress,
         EFI_MEMORY_WB, &Attributes);
       UEFI_PRINT (
         "UEFI: rodin load kernelcache – SetMemoryAttributes completed (%r).\n", Status2);
+      /* Optionally set memory as uncached for kernel initialization */
+      Status2 = gBS->SetMemoryAttributes (MappedAddress, EFI_SIZE_TO_PAGES (0x1000),
+        EFI_MEMORY_UC, &Attributes);
+      UEFI_PRINT (
+        "UEFI: rodin load kernelcache – SetMemoryAttributes (UC) completed (%r).\n", Status2);
       /* Free the temporary buffer */
       FreePool (Buffer);
     }
@@ -359,6 +364,7 @@ out:
  *      then free any temporary resources.
  *   For the scaffold we verbosely print the intended handoff state
  *   and return EFI_UNSUPPORTED.
+ *   5. Set the watchdog timer to prevent system hangs during early boot.
  */
 STATIC
 EFI_STATUS
@@ -393,6 +399,13 @@ EfiPsciHandoff (IN UINT64  AapicId,
 
   /* optionally stall for a brief period to simulate boot latency */
   gBS->Stall (1000); /* 1 millisecond stall */
+
+  /* set the watchdog timer so the platform doesn't hang during early boot */
+  Status = gBS->SetWatchdogTimer (60000, 0, 0, NULL);
+  if (EFI_ERROR (Status)) {
+    UEFI_PRINT (
+      "UEFI: rodin PSCI handoff – SetWatchdogTimer returned %r (continuing scaffold).\n", Status);
+  }
 
   /* No matter the SMC outcome we return UNSUPPORTED for the scaffold
      so the CI workflow can proceed.  A real implementation would
