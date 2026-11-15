@@ -397,7 +397,7 @@ EfiPsciHandoff (IN UINT64  AapicId,
       "UEFI: rodin PSCI handoff – gBS->Smc completed (no‑return expected).\n");
   }
 
-  /* optionally stall for a brief period to simulate boot latency */
+  /* optionally stall for a brief period to simulate boot delay */
   gBS->Stall (1000); /* 1 millisecond stall */
 
   /* set the watchdog timer to prevent system hangs during early boot */
