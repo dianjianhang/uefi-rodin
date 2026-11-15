@@ -23,6 +23,7 @@ jobs:
       - name: Checkout device repository
         uses: actions/checkout@v4
         with:
+          repository: ${{ github.repository_owner }}/UniXNU-rodin
           path: UniXNU-rodin
 
       - name: Checkout UniXNU
