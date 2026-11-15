@@ -2,7 +2,12 @@
 # SoC: MediaTek Dimensity 8400-Ultra (MT6899, aarch64)
 # This file is read by the Mu-Silicium / UniXNU build system.
 
-[firmware]
+[board]
+name = "rodin"
+soc = "mt6899"
+os_profile = "ipados-17.7.11-21H461"  # arm64 profile; identity inherited from profile
+
+[ firmware ]
 # Kernelcache from the selected OS profile (ipados-17.7.11-21H461)
 kernelcache_sha256 = "f18b4df865405f2a287b84977d7aca745e056d656d9fc9df1662970ce2969de7"
 kernelcache_slide  = "-0x1000000"
@@ -13,17 +18,15 @@ dram_size = "0x300000000"
 # PSCI method (confirmed from vendor DTB)
 psci_method = "smc"
 
-[board]
-# Board name must match the device repo convention
-name = "rodin"
-soc = "mt6899"
-os_profile = "ipados-17.7.11-21H461"  # arm64 profile; identity inherited
+# UEFI-specific entries
+[firmware.uefi]
+entry_point = 0x0  # will be filled by the payload builder
+stack_size = 0x200000  # 2 MiB temporary stack
+map_firmware_volume = true
 
 [device]
-# Minimal device entry so the resolver does not complain
 verbose = false
 
 [components]
-# UEFI builds currently use a minimal component set;
-# full catalog (ArmCpu, ArmDTPlatform etc.) is added later
+# Minimal set for now; UniXNU will resolve ArmCpu, ArmDTPlatform etc.
 include = []
