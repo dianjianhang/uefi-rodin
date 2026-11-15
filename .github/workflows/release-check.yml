@@ -12,8 +12,8 @@ on:
   pull_request:
 
 env:
-  UNIXNU_DEVICE: UniXNU-rodin
-  SOC_MODULE: soc:mt6899=UniXNU-mt6899-common
+  UNIXNU_DEVICE: ${{ github.workspace }}/UniXNU-rodin
+  SOC_MODULE: soc:mt6899=${{ github.workspace }}/UniXNU-mt6899-common
 
 jobs:
   check:
@@ -43,10 +43,14 @@ jobs:
       - name: Resolver release (defconfig/fetch/status/kernel+tree)
         run: |
           cd UniXNU
+          set -o pipefail
           ./unixnu release -D "$UNIXNU_DEVICE" --local-module "$SOC_MODULE" 2>&1 | tee release.log
-          grep -i "error\|fail\|wrong" release.log || echo "release OK"
+          rc=${PIPESTATUS[0]}
+          echo "release exit code: $rc"
+          test "$rc" -eq 0
 
       - name: Upload release log
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: uefi-release-log
