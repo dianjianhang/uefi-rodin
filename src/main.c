@@ -362,9 +362,9 @@ out:
       and still return UNSUPPORTED.
  *   4. Optionally stall for a brief period to simulate boot delay,
  *      then free any temporary resources.
+ *   5. Set the watchdog timer to prevent system hangs during early boot.
  *   For the scaffold we verbosely print the intended handoff state
  *   and return EFI_UNSUPPORTED.
- *   5. Set the watchdog timer to prevent system hangs during early boot.
  */
 STATIC
 EFI_STATUS
@@ -400,7 +400,7 @@ EfiPsciHandoff (IN UINT64  AapicId,
   /* optionally stall for a brief period to simulate boot latency */
   gBS->Stall (1000); /* 1 millisecond stall */
 
-  /* set the watchdog timer so the platform doesn't hang during early boot */
+  /* set the watchdog timer to prevent system hangs during early boot */
   Status = gBS->SetWatchdogTimer (60000, 0, 0, NULL);
   if (EFI_ERROR (Status)) {
     UEFI_PRINT (
