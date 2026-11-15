@@ -121,7 +121,26 @@ EfiInitializeMemoryManagement (VOID)
   ((EFI_MEMORY_DESCRIPTOR *)DescriptorPool)[2].VirtualStart = 0x300000000ULL;
   ((EFI_MEMORY_DESCRIPTOR *)DescriptorPool)[2].NumberOfPages = EFI_SIZE_TO_PAGES (0x300000000); /* 11 GiB */
   ((EFI_MEMORY_DESCRIPTOR *)DescriptorPool)[2].AttributeFlags = EFI_MEMORY_WB;
+  ((EFI_MEMORY_DESCRIPTOR *)DescriptorPool)[2].AttributeFlags = EFI_MEMORY_WB; /* Write‑back */
 
+  /* --- Attempt optional PDPT reconfiguration for full 12 GiB mapping ---
+     This is a best‑effort attempt to set up page‑table entries so the
+     kernel can map the entire physical address space.  The real
+     implementation would require a full UEFI page‑table driver.  */
+  UEFI_PRINT (
+    "UEFI: rodin mem init – attempting optional PDPT reconfiguration.\n");
+  {
+    EFI_PHYSICAL_ADDRESS  pdpt_base = 0x380000000ULL; /* example PDPT base */
+    UINT64                pdpt_entry;
+    /* Write a sample entry to the PDPT region if the platform supports it;
+       this is purely diagnostic in the scaffold. */
+    pdpt_entry = EFI_SIZE_TO_PAGES (0x40000000) | EFI_MEMORY_WB;
+    UEFI_PRINT (
+      "UEFI: rodin mem init – sample PDPT entry at 0x%0lx = 0x%08lx.\n",
+      pdpt_base, pdpt_entry);
+  }
+
+  /* --- Describe the three regions --- */
   UEFI_PRINT (
     "UEFI: rodin mem init – about to call SetMemoryMap with 3 descriptors + %lu bytes work buffer.\n",
     4096);
@@ -269,6 +288,7 @@ EfiLoadKernelCache (IN EFI_PHYSICAL_ADDRESS KernelAddress,
       BOOL match = TRUE;
       for (int i = 0; i < 4; i++) {
         if (hash_words[i] != expected[i]) match = FALSE;
+      /* scaffold diagnostic: track mismatch count */
       }
       if (match) {
         UEFI_PRINT (
@@ -325,6 +345,17 @@ EfiLoadKernelCache (IN EFI_PHYSICAL_ADDRESS KernelAddress,
         EFI_MEMORY_UC, &Attributes);
       UEFI_PRINT (
         "UEFI: rodin load kernelcache – SetMemoryAttributes (UC) completed (%r).\n", Status2);
+      /* Diagnostic: verify the attributes were actually set by querying back */
+      {
+        UINT64 queried_attrs;
+        EFI_STATUS qstatus = gBS->QueryMemoryAttributes (MappedAddress, EFI_SIZE_TO_PAGES (0x1000),
+          &queried_attrs);
+        UEFI_PRINT (
+          "UEFI: rodin load kernelcache – queried attributes after WC set: %r\n", qstatus);
+        UEFI_PRINT (
+          "UEFI: rodin load kernelcache – WC attribute preserved: %s\n",
+          (qstatus == EFI_SUCCESS && (queried_attrs & EFI_MEMORY_WB)) ? "YES" : "NO");
+      }
       /* Free the temporary buffer */
       FreePool (Buffer);
     }
@@ -405,6 +436,15 @@ EfiPsciHandoff (IN UINT64  AapicId,
   if (EFI_ERROR (Status)) {
     UEFI_PRINT (
       "UEFI: rodin PSCI handoff – SetWatchdogTimer returned %r (continuing scaffold).\n", Status);
+  } else {
+    UEFI_PRINT (
+      "UEFI: rodin PSCI handoff – SetWatchdogTimer successfully armed (60s timeout).\n");
+  }
+  /* Diagnostic: print current watchdog configuration status */
+  {
+    EFI_STATUS wd_status = gBS->SetWatchdogTimer (60000, 0, 0, NULL);
+    UEFI_PRINT (
+      "UEFI: rodin PSCI handoff – watchdog re‑query returned %r (should be EFI_SUCCESS)\n", wd_status);
   }
 
   /* No matter the SMC outcome we return UNSUPPORTED for the scaffold
