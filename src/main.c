@@ -75,10 +75,10 @@ UINT64  gPsciSmcId = 0x84000102;
  *   4. Optionally re‑configure the page‑table entries (PDPT) so that
  *      the kernel can map the full 12 GiB.
  *   5. Free the temporary pool before returning.
- *   We allocate descriptors and a work buffer, fill them in, call
- *   SetMemoryMap, free the pool, and no matter the outcome we return
- *   EFI_UNSUPPORTED with a verbose diagnostic print – the CI workflow
- *   still succeeds.
+ *   We allocate the descriptors and a work buffer, fill them in,
+ *   call SetMemoryMap, free the pool, and no matter the outcome we
+ *   return EFI_UNSUPPORTED with a verbose diagnostic print – the CI
+ *   workflow still succeeds.
  */
 STATIC
 EFI_STATUS
@@ -167,8 +167,8 @@ EfiInitializeMemoryManagement (VOID)
  *   5. Allocate pages for the slid binary, copy the file content,
  *      and set memory attributes.
  *   For the scaffold we iterate the FV, print diagnostics for each
- *   file we see, allocate a dummy page, copy a stub, and return
- *   EFI_UNSUPPORTED.
+ *   file we see, allocate a dummy page, copy a stub, set attributes,
+ *   and return EFI_UNSUPPORTED.
  */
 STATIC
 EFI_STATUS
@@ -189,6 +189,7 @@ EfiLoadKernelCache (IN EFI_PHYSICAL_ADDRESS KernelAddress,
   EFI_FILE_INFO *FileInfo;
   EFI_PHYSICAL_ADDRESS  MappedAddress;
   EFI_STATUS  Status2;
+  UINT64      Attributes;
 
   UEFI_PRINT (
     "UEFI: rodin load kernelcache – about to enumerate firmware volume (sha256 %a, slide %ld).\n",
@@ -316,7 +317,7 @@ EfiLoadKernelCache (IN EFI_PHYSICAL_ADDRESS KernelAddress,
         "UEFI: rodin load kernelcache – first 4KB copied to allocated pages.\n");
       /* Set memory attributes (write‑back) */
       Status2 = gBS->SetMemoryAttributes (MappedAddress, EFI_SIZE_TO_PAGES (0x1000),
-        EFI_MEMORY_WB, &oldAttributes);
+        EFI_MEMORY_WB, &Attributes);
       UEFI_PRINT (
         "UEFI: rodin load kernelcache – SetMemoryAttributes completed (%r).\n", Status2);
       /* Free the temporary buffer */
@@ -354,8 +355,8 @@ out:
       supports it) – note: on many QEMU / virtue builds this will
       simply be a no‑op or return immediately; we catch any error
       and still return UNSUPPORTED.
- *   4. Optionally stalls for a brief period to simulate boot delay,
- *      then frees any temporary resources.
+ *   4. Optionally stall for a brief period to simulate boot delay,
+ *      then free any temporary resources.
  *   For the scaffold we verbosely print the intended handoff state
  *   and return EFI_UNSUPPORTED.
  */
