@@ -2,9 +2,12 @@
 # SoC: MediaTek Dimensity 8400-Ultra (MT6899, aarch64)
 # This file is read by the Mu-Silicium / UniXNU build system.
 
+schema_version = 2
+
 [board]
 name = "rodin"
 soc = "mt6899"
+soc_source = "mt6899"
 os_profile = "ipados-17.7.11-21H461"  # arm64 profile; identity inherited from profile
 
 [ firmware ]
@@ -13,9 +16,9 @@ kernelcache_sha256 = "f18b4df865405f2a287b84977d7aca745e056d656d9fc9df1662970ce2
 kernelcache_slide  = "-0x1000000"
 # Path to the compiled device tree (generated from dts/rodin.dtb)
 dtb_path = "dts/rodin.dtb"
-# DRAM size — 12 GiB test device; vendor DTB only reserves 1 GiB low window
+ # DRAM size — 12 GiB test device; vendor DTB only reserves 1 GiB low window
 dram_size = "0x300000000"
-# PSCI method (confirmed from vendor DTB)
+ # PSCI method (confirmed from vendor DTB)
 psci_method = "smc"
 
 # UEFI-specific entries
@@ -28,5 +31,4 @@ map_firmware_volume = true
 verbose = false
 
 [components]
-# Minimal set for now; UniXNU will resolve ArmCpu, ArmDTPlatform etc.
-include = []
+include = ["ArmDTPlatform", "ArmCpu", "XnuPrelink", "SoftwareAES"]
