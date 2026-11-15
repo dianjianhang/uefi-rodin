@@ -31,6 +31,12 @@ jobs:
           repository: UniXNU/UniXNU
           path: UniXNU
 
+      - name: Checkout UniXNU mt6899 common soc
+        uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU-mt6899-common
+          path: UniXNU-mt6899-common
+
       - name: Checkout uefi-rodin scaffold
         uses: actions/checkout@v4
         with:
