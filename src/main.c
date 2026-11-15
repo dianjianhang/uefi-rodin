@@ -98,7 +98,7 @@ EfiInitializeMemoryManagement (VOID)
   MemCopy (DescriptorPool, Descriptors, DescriptorPoolSize);
 
   /* --- Describe the three regions --- */
-  /* Region 0: vendor low window (available to the kernel) */
+  /* Region 0: vendor low window – available to the kernel */
   ((EFI_MEMORY_DESCRIPTOR *)DescriptorPool)[0].Type = EfiUninitializedData;
   ((EFI_MEMORY_DESCRIPTOR *)DescriptorPool)[0].PhysicalStart = 0;
   ((EFI_MEMORY_DESCRIPTOR *)DescriptorPool)[0].VirtualStart = 0;
@@ -135,6 +135,9 @@ EfiInitializeMemoryManagement (VOID)
       (unsigned long)DescriptorPoolSize);
     Allocated = TRUE;
   }
+
+  /* Free the descriptor pool since we no longer need it after setmap */
+  gBS->FreePool (DescriptorPool);
 
   /* Even if SetMemoryMap succeeded we still return UNSUPPORTED so the
      CI workflow can proceed; a real implementation would keep the
@@ -180,8 +183,6 @@ EfiLoadKernelCache (IN EFI_PHYSICAL_ADDRESS KernelAddress,
   UINTN        FileSize;
   VOID         *Buffer;
   EFI_FILE_INFO *FileInfo;
-  UINT8        ComputedSha256[32];
-  CHAR8        Sha256Str[65];
 
   UEFI_PRINT (
     "UEFI: rodin load kernelcache – about to enumerate firmware volume (sha256 %a, slide %ld).\n",
@@ -193,7 +194,7 @@ EfiLoadKernelCache (IN EFI_PHYSICAL_ADDRESS KernelAddress,
   if (EFI_ERROR (Status)) {
     UEFI_PRINT (
       "UEFI: rodin load kernelcache – no firmware volume handles (%r).\n", Status);
-    return EFI_UNSUPPORTED;
+    goto out;
   }
 
   for (Index = 0; Index < HandleCount; Index++) {
@@ -305,6 +306,7 @@ cleanup2:
 cleanup:
     File->Close (File);
     Root->Close (Root);
+out:
     for (UINTN i = 0; i < HandleCount; i++) gBS->FreePool (Handles[i]);
     UEFI_PRINT (
       "UEFI: rodin load kernelcache – returning EFI_UNSUPPORTED (scaffold).\n");
