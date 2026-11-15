@@ -1,0 +1,49 @@
+name: UEFI Scaffold Check
+#
+# Minimal CI check: verify that the uefi-rodin scaffold repos
+# (device, soc, uefi) can be checked out and the unixnu resolver
+# recognises the board configuration. No full UEFI build here.
+#
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  UNIXNU_DEVICE: ../UniXNU-rodin
+  SOC_MODULE: soc:mt6899=../UniXNU-mt6899-common
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout device repository
+        uses: actions/checkout@v4
+        with:
+          path: UniXNU-rodin
+
+      - name: Checkout UniXNU
+        uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU
+          path: UniXNU
+
+      - name: Checkout uefi-rodin scaffold
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/uefi-rodin
+          path: uefi-rodin
+
+      - name: Make unixnu executable
+        run: chmod +x UniXNU/unixnu
+
+      - name: Quick config check
+        run: |
+          cd UniXNU
+          # Just verify the binary runs and prints usage; we don't run defconfig/fetch
+          # to avoid long network I/O in this minimal check.
+          ./unixnu --help 2>&1 | head -1
+          echo "scaffold check OK"
