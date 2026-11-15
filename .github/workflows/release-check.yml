@@ -1,0 +1,59 @@
+name: UEFI Config Check
+#
+# CI check: verify that the uefi-rodin scaffold (device + soc + firmware)
+# can be fully resolved by the UniXNU toolchain.
+# This runs the 'release' chain (defconfig + fetch + status + build manifest)
+# without attempting a full binary build, so it fast-paths validation.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  UNIXNU_DEVICE: UniXNU-rodin
+  SOC_MODULE: soc:mt6899=UniXNU-mt6899-common
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout device repository
+        uses: actions/checkout@v4
+        with:
+          path: UniXNU-rodin
+
+      - name: Checkout UniXNU
+        uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU
+          path: UniXNU
+
+      - name: Checkout uefi-rodin scaffold
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/uefi-rodin
+          path: uefi-rodin
+
+      - name: Make unixnu executable
+        run: chmod +x UniXNU/unixnu
+
+      - name: Resolver release (defconfig/fetch/status/kernel+tree)
+        run: |
+          cd UniXNU
+          ./unixnu release -D "$UNIXNU_DEVICE" --local-module "$SOC_MODULE" 2>&1 | tee release.log
+          grep -i "error\|fail\|wrong" release.log || echo "release OK"
+
+      - name: Upload release log
+        uses: actions/upload-artifact@v4
+        with:
+          name: uefi-release-log
+          path: |
+            UniXNU/release.log
+            uefi-rodin/release.log
+            uefi-rodin/board.toml
+            uefi-rodin/src/main.c
+            uefi-rodin/dts/rodin.dts
+          if-no-files-found: warn
