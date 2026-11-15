@@ -165,7 +165,7 @@ EfiInitializeMemoryManagement (VOID)
  *   4. If a match is found, verify the Mach‑O magic (0xfade0cfc),
  *      and apply the slide gKernelcacheSlide (–0x1000000).
  *   5. Allocate pages for the slid binary, copy the file content,
- *      and set memory attributes.
+ *      and set memory attributes (WB and UC).
  *   For the scaffold we iterate the FV, print diagnostics for each
  *   file we see, allocate a dummy page, copy a stub, set attributes,
  *   and return EFI_UNSUPPORTED.
@@ -319,7 +319,7 @@ EfiLoadKernelCache (IN EFI_PHYSICAL_ADDRESS KernelAddress,
       Status2 = gBS->SetMemoryAttributes (MappedAddress, EFI_SIZE_TO_PAGES (0x1000),
         EFI_MEMORY_WB, &Attributes);
       UEFI_PRINT (
-        "UEFI: rodin load kernelcache – SetMemoryAttributes completed (%r).\n", Status2);
+        "UEFI: rodin load kernelcache – SetMemoryAttributes (WB) completed (%r).\n", Status2);
       /* Optionally set memory as uncached for kernel initialization */
       Status2 = gBS->SetMemoryAttributes (MappedAddress, EFI_SIZE_TO_PAGES (0x1000),
         EFI_MEMORY_UC, &Attributes);
