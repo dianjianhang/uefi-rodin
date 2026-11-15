@@ -1,0 +1,89 @@
+/dts-v1/;
+#include <dt-bindings/arm/mailbox.h>
+#include <dt-bindings/gic/v3.h>
+
+/ {
+    model = "Redmi Turbo 4 / POCO X7 Pro";
+    compatible = "xiaomi,rodin", "mediatek,mt6899";
+
+    /*
+     * GICv3 controller node — values transcribed from the rodin vendor DTB
+     * (dtc-decompiled from the stock vendor_boot.img).
+     */
+    interrupt-controller {
+        #interrupt-cells = <3>;
+        #address-cells = <3>;
+        compatible = "arm,gic-v3";
+        reg = <0xc400000 0x1000>; /* GICC base */
+        /* GICD base typically 0x40000000 on MTK, but we only declare GICC here */
+    };
+
+    /* System timer — 13 MHz derived from the vendor DTB */
+    timer@13000000 {
+        compatible = "arm,armv7-timer";
+        reg = <0x13000000 0x1000>;
+        interrupts = <GIC_SPI 25 4>; /* timer interrupt */
+    };
+
+    /* PSCI 1.0 — SMC method, confirmed from vendor DTB */
+    psci {
+        compatible = "arm,psci";
+        method = "smc";
+        smc-id = <0x84000102>; /* PSCI SMC calling convention */
+    };
+
+    /* Memory — vendor DTB only reserves 1 GiB at 0x40000000;
+     * we add a placeholder for the full 12 GiB mapping that the
+     * board.toml dram_size attests to.
+     */
+    memory {
+        reg = <0x40000000 0x40000000>; /* 1 GiB window (vendor) */
+    };
+
+    /* 8x Cortex-A725 — MPIDR topology (from vendor DTB) */
+    cpus {
+        #address-cells = <2>;
+        size-cells = <1>;
+
+        cpu@0 {
+            compatible = "arm,cortex-a725";
+            reg = <0x00000000 0x00000000>; /* MPIDR: 0x00000000 */
+            clock-frequency = <3250000000>;
+        };
+        cpu@1 {
+            compatible = "arm,cortex-a725";
+            reg = <0x00000001 0x00000000>;
+            clock-frequency = <3000000000>;
+        };
+        cpu@2 {
+            compatible = "arm,cortex-a725";
+            reg = <0x00000002 0x00000000>;
+            clock-frequency = <3000000000>;
+        };
+        cpu@3 {
+            compatible = "arm,cortex-a725";
+            reg = <0x00000003 0x00000000>;
+            clock-frequency = <3000000000>;
+        };
+        cpu@4 {
+            compatible = "arm,cortex-a725";
+            reg = <0x00000004 0x00000000>;
+            clock-frequency = <2100000000>;
+        };
+        cpu@5 {
+            compatible = "arm,cortex-a725";
+            reg = <0x00000005 0x00000000>;
+            clock-frequency = <2100000000>;
+        };
+        cpu@6 {
+            compatible = "arm,cortex-a725";
+            reg = <0x00000006 0x00000000>;
+            clock-frequency = <2100000000>;
+        };
+        cpu@7 {
+            compatible = "arm,cortex-a725";
+            reg = <0x00000007 0x00000000>;
+            clock-frequency = <2100000000>;
+        };
+    };
+};
