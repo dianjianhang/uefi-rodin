@@ -1,0 +1,11 @@
+##
+#  Copyright (c) 2024-2026, UniXNU contributors.
+#
+#  SPDX-License-Identifier: BSD-2-Clause-Patent
+##
+
+[Defines]
+  DEC_SPECIFICATION              = 0x00010005
+  PACKAGE_NAME                   = rodinPkg
+  PACKAGE_GUID                   = 7b8e6f2d-4a1c-4d9e-9b3a-1f2e3d4c5b6a
+  PACKAGE_VERSION                = 0.1
