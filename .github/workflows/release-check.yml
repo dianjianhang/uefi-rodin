@@ -45,6 +45,11 @@ jobs:
           repository: ${{ github.repository_owner }}/uefi-rodin
           path: uefi-rodin
 
+      - name: Initialize XnuPrelink kit submodule (patch-series check)
+        run: |
+          cd UniXNU
+          git submodule update --init kits/XnuPrelink
+
       - name: Make unixnu executable
         run: chmod +x UniXNU/unixnu
 
