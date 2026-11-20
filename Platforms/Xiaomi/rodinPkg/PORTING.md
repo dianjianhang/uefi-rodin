@@ -54,14 +54,37 @@ High DRAM / firmware carveouts — **blocked on real data**:
   any DTB we have.
 - The vendor DTBs for `vendor_boot`, `dtbo` and `tee` all carry an **empty
   `/memreserve/`** table, and `gz.img` is the GenieZone hypervisor which computes
-  DRAM size at runtime (`platform_memsize`, `total dram size`). There is **no
-  static DRAM/TEE/ATF/SPM table** in the partition dumps.
+  DRAM size at runtime (`platform_memsize`, `total dram size`).
+- **`lk.img` / `preloader_raw.img` were added and analysed** (MTK `0x58881688`
+  image header; `lk.img` embeds two DTBs — the main rodin DT + a dtbo overlay).
+  They do **not** contain a static absolute memory-layout table: LK computes DRAM
+  size from the preloader `dram_para`/calibration at boot (`Total DRAM = %llx`,
+  `dramc: read size from dram_para`) and allocates every reserved mblock at runtime
+  from DRAM. The vendor-DTB carrier properties give the carveout **sizes** but
+  their address fields are literally `0` (`scp-remap-addr=0`, `sspm-res-ram-start=0`).
+- Sourced carveout **sizes** (from the vendor DTB — real, but bases are runtime):
+
+  | Region | Size | DTB property |
+  |---|---|---|
+  | SCP DRAM | 2 MiB (`0x200000`) | `scp-dram-size` |
+  | SSPM res-RAM | 1.0625 MiB (`0x110000`) | `sspm-res-ram-size` |
+  | VCP DRAM | 8 MiB (`0x800000`) | `vcp-dram-size` |
+  | VCP secure dump | 2 MiB @ +6 MiB | `vcp-secure-dump-size/-offset` |
+  | MCUPM/SSPM/GPUEB met-res-ram | 4 MiB each | `/met/met-res-ram/*` |
+  | SVP / TUI / Prot | 96 / 64 / 32 MiB | `memory-ssmr-features` |
+  | SSMR reserved CMA | 256 MiB (`0x10000000`) | reserved-memory |
+  | CCCI dpmaif cache / nocache | `0x190000` / `0x50000` | reserved-memory |
+  | MKP kernel-code-protection | `0x10000` | reserved-memory |
+  | connected-SCP shm | `0x20000` @ remap-offset `0x2100000` | `/connscp` |
+
+  TEE / ATF(BL31) / GZ(GenieZone) / modem sizes and sites are **not** exposed in any
+  of these images.
 - Therefore the remaining 11 GiB is mapped as a single `Reserv` placeholder
   (`High DRAM Reserve`, `0x80000000` + `0x2C0000000`). It is deliberately **not**
   handed to the OS: feeding unsourced DRAM to the payload would risk corrupting
   TEE/ATF. Replace it with the real per-region carveouts (and promote the leftover
   to `Conv`) once the bootloader **LK "reserved mblock"** table — or `/proc/iomem`
-  from a booted rodin — is available.
+  / an mrdump from a booted rodin — is available.
 
 ## Present (in the fork)
 
@@ -90,7 +113,8 @@ High DRAM / firmware carveouts — **blocked on real data**:
 ## Device inputs available locally (workspace)
 
 - Stock `boot.img`, `vendor_boot.img`, `dtbo.img`, `gz.img`, `tee.img`, `spmfw.img`,
-  `sspm.img`, `scp.img`, `gpt.bin` (under `turbo4分区/` in the workspace).
+  `sspm.img`, `scp.img`, `lk.img`, `preloader_raw.img`, `gpt.bin` (under
+  `turbo4分区/` in the workspace).
 - Extracted vendor DTB/DTS (`vendor_boot` dtb0, `dtbo` dtb0, `tee` dtb0, `rodin.dts`,
   `dtbo.dts`).
 - Vendor DTB/DTS cache in UniXNU-rodin (`.cache/firmware/rodin-vendor.dtb/.dts`).
