@@ -2,8 +2,9 @@ name: UEFI Config Check
 #
 # CI check: verify that the uefi-rodin scaffold (device + soc + firmware)
 # can be fully resolved by the UniXNU toolchain.
-# This runs the 'release' chain (defconfig + fetch + status + build manifest)
-# without attempting a full binary build, so it fast-paths validation.
+# This check runs the release chain up to the patch plan (defconfig,
+# module resolution, patch order) without fetching sources or the IPSW and
+# without attempting any build step, so it fast-paths validation.
 
 on:
   workflow_dispatch:
@@ -47,11 +48,14 @@ jobs:
       - name: Make unixnu executable
         run: chmod +x UniXNU/unixnu
 
-      - name: Resolver release (defconfig/fetch/status/kernel+tree)
+      - name: Resolver release (defconfig/modules/patches, no build)
         run: |
           cd UniXNU
           set -o pipefail
-          ./unixnu release -D "$UNIXNU_DEVICE" --local-module "$SOC_MODULE" 2>&1 | tee release.log
+          # --no-deps skips the source + IPSW fetch (which needs the Linux
+          # toolchain's lzfse); --check stops after defconfig, module
+          # resolution and the patch plan, before any build step.
+          ./unixnu release --no-deps --check -D "$UNIXNU_DEVICE" --local-module "$SOC_MODULE" 2>&1 | tee release.log
           rc=${PIPESTATUS[0]}
           echo "release exit code: $rc"
           test "$rc" -eq 0
