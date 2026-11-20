@@ -13,9 +13,9 @@ rodin platform was integrated into the Mu-Silicium fork `dianjianhang/uefi-sheng
 - First green run: [44816679614](https://github.com/dianjianhang/uefi-sheng/actions/runs/44816679614)
   (commit `08f8295` on `sheng`).
 - Artifacts:
-  - `SILICIUM_UEFI.fd` — 0x200000 bytes, valid `_FVH` firmware-volume header
+  - `SILICIUM_UEFI.fd` â 0x200000 bytes, valid `_FVH` firmware-volume header
     (sha256 `7a4628ce7fbee6728d8864bf2e74e3ec0b744d0152843160f7c0eee5431dc68d`).
-  - `Mu-rodin.img` — Android boot image (header v2), kernel = gzip(FD),
+  - `Mu-rodin.img` â Android boot image (header v2), kernel = gzip(FD),
     `kernel_addr 0x40040000` (sha256 `7a88f515e02290a49349af47ae6d088a1c80f9c2810a02e3ac18ae1a448656fc`).
 
 What made it link: the shared `MediaTekPkg` DXE drivers are never exercised by the
@@ -27,7 +27,7 @@ single platform-scoped `-Wno-unused-but-set-variable` was added to
 ## Memory map (2026-11-21)
 
 `Library/MemoryMapLib/MemoryMapLib.c` was extended and every region is now tied to
-a concrete rodin data source (vendor DTB under `turbo4分区/`), commit `0f54550` on
+a concrete rodin data source (vendor DTB under `turbo4ååº/`), commit `0f54550` on
 `sheng`, verified green in run [44819034364](https://github.com/dianjianhang/uefi-sheng/actions/runs/44819034364).
 
 Sourced / confirmed:
@@ -47,7 +47,7 @@ Sourced / confirmed:
   `gic-cpu@c400000`, `syscon@10000000` topckgen, `infracfg@1020e000`,
   `emicen@10219000`, `dramc@10230000`, apmixedsys `0x1000c000`, pwrap `0x1000d000`).
 
-Memory map — **sourced from a live root dump of a booted rodin**:
+Memory map â **sourced from a live root dump of a booted rodin**:
 
 - A rooted rodin (model 24129RT7CC, HyperOS 4.0 / Android 17, kernel 6.6.118,
   KernelSU) was dumped over adb:
@@ -70,7 +70,7 @@ Memory map — **sourced from a live root dump of a booted rodin**:
   | TEE secmem / reserved / shm | `0xBF800000` / `0xEE200000` / `0x7FA00000` | 5 / 227 / 4 MiB |
   | GZ (GenieZone) + gz-log | `0x325C00000` | 32 MiB (+0.3) |
   | SCP / SSPM / MCUPM / VCP | `0xB8000000` / `0x9FD70000` / `0x7FEF0000` / `0xBF000000` | 10 / 2.5 / 1 / 8 MiB |
-  | modem (md_mem ×4, ap_md_*) | `0xCC000000`…`0xE9780000` | ~200 MiB |
+  | modem (md_mem Ã4, ap_md_*) | `0xCC000000`â¦`0xE9780000` | ~200 MiB |
   | ADSP / APU(apusys) | `0x78000000` / `0x8FA00000` | 25 / 6 MiB |
   | framebuffer / display-dbg | `0xFCC20000` / `0x6CC00000` | 52 / 32 MiB |
   | security booker / dice | `0x327F70000` | 384 MiB |
@@ -94,7 +94,7 @@ Memory map — **sourced from a live root dump of a booted rodin**:
   8x Cortex-A725 single cluster, UFS) + Clock/Gpio/Msdc/PmicWrapper/PlatformSec Impl
   libraries, structurally derived from `MT6789Pkg`.
 - `Resources/Configs/rodin.toml` (`[uefi_fd] base 0x40040000 size 0x200000`).
-- `Resources/DTBs/rodin.dtb` — rodin vendor DTB.
+- `Resources/DTBs/rodin.dtb` â rodin vendor DTB.
 
 ## Still required before hardware boot
 
@@ -112,7 +112,7 @@ Memory map — **sourced from a live root dump of a booted rodin**:
 
 - Stock `boot.img`, `vendor_boot.img`, `dtbo.img`, `gz.img`, `tee.img`, `spmfw.img`,
   `sspm.img`, `scp.img`, `lk.img`, `preloader_raw.img`, `gpt.bin` (under
-  `turbo4分区/` in the workspace).
+  `turbo4ååº/` in the workspace).
 - Extracted vendor DTB/DTS (`vendor_boot` dtb0, `dtbo` dtb0, `tee` dtb0, `rodin.dts`,
   `dtbo.dts`).
 - Vendor DTB/DTS cache in UniXNU-rodin (`.cache/firmware/rodin-vendor.dtb/.dts`).
@@ -126,3 +126,48 @@ Memory map — **sourced from a live root dump of a booted rodin**:
 Then from UniXNU:
 - `unixnu build firmware --uefi <Mu-Silicium checkout>`
 - `unixnu bootimg --uefi <Mu-Silicium checkout>`
+
+
+## Live-device verified hardware facts (root dump, 2026-11-21)
+
+Rodin was booted with KernelSU root and queried over adb; the values below are
+read directly from the running device and supersede any vendor-image guesses.
+
+### SoC / platform
+- PMIC: **MediaTek MT6363** (`pmic-ecid` compatible `mediatek,mt6363-efuse`; also `mt6363-temp`, `mt6363-vs-voter`).
+- PMIC bus: **SPMI**, `spmi@1cc04000` (`mediatek,mt6899-spmi`). Sub-windows:
+  `0x1CC04000+0x8FF`, `0x1CC01000+0x100`, `0x1C020000+0x8FF`, `0x1CC01800+0x100`, `0x1C014000+0x8FF`, `0x1CC08000+0x100`.
+  The legacy pwrap register map in `PmicWrapperImplLib.c` is wrong for rodin and must be replaced by an SPMI-based implementation. `TODO(MT6899)`.
+- GIC: distributor `0x0C400000` (0x40000), redistributor `0x0C440000` (0x200000), from `interrupt-controller@c400000/reg` (the earlier `0x0C000000` was wrong).
+- Timer `arm,armv8-timer`; AP watchdog `watchdog@1c00b000` (`mediatek,mt6899-wdt`), active (`aee_aed.poffreason=AP_WDT`).
+
+### Memory / boot
+- Bank `memory@40000000` = `0x40000000` + `0x300000000` (12 GiB, single bank). 53 LK mblocks carry real base+size (see MemoryMapLib).
+- Free DRAM window `0xA7000000..0xA8000000` hosts the Silicium UEFI runtime cluster.
+- Stock `boot.img` = Android boot **header v4**, kernel-only (`ramdisk_size = 0`), no second stage; ramdisk lives in `init_boot`.
+- Live cmdline: `bootopt=64S3,32N2,64N2`, `ramoops.mem_address=0x6ec00000 ramoops.mem_size=0x410000`, `hwid.project_name=rodin`, `ufshcd_core.poll_queues=0`, `initcall_blacklist=ufshcd_core_init`.
+
+### Clock / register bases
+MTK clock controllers are not device-tree nodes (kernel hardcodes them): topckgen `0x10000000`,
+infracfg-ao `0x10001000`, apmixedsys `0x1000C000`, dramc `0x10230000`, UART0 `0x11002000`,
+USB0 `0x11200000`, UFS PHY `0x112A0000`, UFS HCI `0x112B0000`, display `0x14000000`.
+
+## BootShim / boot-header-v4 handoff (migrated)
+
+Rodin now uses the same Silicium layout as marble / peridot / muyu:
+
+```
+[boot_shim]  requires_kernel_header = true
+[uefi_fd]    base = 0xA7100000   size = 0x300000
+[boot_image] header_version = 4
+```
+
+`build_uefi.py` concatenates `BootShim.bin + SILICIUM_UEFI.fd`, gzips it and writes a v4
+boot image; BootShim (built from `BootShim/BootShim.S` with `FD_BASE`/`FD_SIZE`) runs from
+the LK kernel load address, relocates the FD to `0xA7100000` and jumps to it. The matching
+UEFI runtime cluster (FD, stack 0xA760D000, info block, page tables, log buffer, SEC/sched
+heaps, FV region, UEFI reserve) is carved out of `0xA7000000..0xA8000000` in MemoryMapLib and
+`PcdCPUCoresStackBase` = `0xA760D000`.
+
+Status: builds green; **still needs on-device validation before flashing** (PMIC/clock/UFS
+drivers remain MT6899 scaffolds).
