@@ -26,10 +26,8 @@
   # SoC/board identifiers (bring-up placeholders)
   SOC_TYPE                       = MT6899
 
-!include SiliciumPkg/SiliciumPkg.dsc.inc
-# TODO: include MT6899-specific silicon package once available
-# !include MT6899Pkg/MT6899Pkg.dsc.inc
-# !include MediaTekPkg/MediaTekPkg.dsc.inc
+# MT6899Pkg pulls in MediaTekPkg.dsc.inc, which in turn pulls in SiliciumPkg.dsc.inc.
+!include MT6899Pkg/MT6899Pkg.dsc.inc
 
 [PcdsFixedAtBuild]
   #
@@ -42,7 +40,8 @@
   #
   # UEFI Stack (placeholder)
   #
-  gArmPlatformTokenSpaceGuid.PcdCPUCoresStackBase|0xA760D000
+  # Primary-core stack lives in the UEFI Stack region declared by MemoryMapLib.
+  gArmPlatformTokenSpaceGuid.PcdCPUCoresStackBase|0x40000000
   gArmPlatformTokenSpaceGuid.PcdCPUCorePrimaryStackSize|0x40000
 
   #
@@ -65,11 +64,11 @@
 
 [LibraryClasses]
   #
-  # Memory map / platform SEC (stubs - to be implemented)
+  # Memory map (device-specific, derived from the rodin vendor DTB)
   #
-  # MemoryMapLib|rodinPkg/Library/MemoryMapLib/MemoryMapLib.inf
-  # ConfigurationMapLib|rodinPkg/Library/ConfigurationMapLib/ConfigurationMapLib.inf
-  # PlatformSecLib|rodinPkg/Library/PlatformSecLib/PlatformSecLib.inf
+  MemoryMapLib|rodinPkg/Library/MemoryMapLib/MemoryMapLib.inf
+  # TODO: ConfigurationMapLib|rodinPkg/Library/ConfigurationMapLib/ConfigurationMapLib.inf
+  # PlatformSecLib is supplied by MT6899Pkg.dsc.inc (MT6899Pkg/Library/PlatformSecLib).
 
 [Components]
   #

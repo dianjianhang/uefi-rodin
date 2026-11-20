@@ -5,14 +5,25 @@ Scaffold status for Redmi Turbo 4 / POCO X7 Pro (rodin, MediaTek Dimensity 8400-
 ## Present
 - `rodin.dsc`, `rodin.fdf`, `rodin.dec`, `DeviceBuild.py` minimal stubs.
 - Include lists (`APRIORI.inc`, `DXE.inc`, `RAW.inc`) are placeholders.
-- Basic SMBIOS/framebuffer placeholders; memory map is a conservative stub.
+- Basic SMBIOS/framebuffer placeholders.
+- **`Silicon/MediaTek/MT6899Pkg/`** - MediaTek MT6899 SoC package skeleton (Clock/Gpio/
+  Msdc/Pmic/PlatformSec Impl libraries + `MT6899Pkg.dsc.inc`), structurally derived from
+  `MT6789Pkg`. `MT6899Pkg.dsc.inc` PCDs are sourced from the vendor DTB (GIC 0x0C000000 /
+  0x0C400000, 8x A725 single cluster, UFS). The library bodies (esp. the 4k-line
+  `ClockImplLib.c` clock tree) are still MT6789 register maps and MUST be re-derived from
+  the MT6899 TRM before any hardware use.
+- **`Platforms/Xiaomi/rodinPkg/Library/MemoryMapLib/`** - device memory map derived from
+  the rodin vendor DTB: low 1 GiB DDR window (`/memory@40000000`) plus real MT6899 register
+  regions (GIC, topckgen, pinctrl, pwrap, dramc, UART0, MSDC-0, UFS PHY/HCI, USB xHCI,
+  display, systimer, watchdog). Wired into `rodin.dsc` via `MemoryMapLib|...`.
 
 ## Required for a buildable Mu-Silicium platform
-- MT6899 silicon package support (clocks, GPIO, PMIC, storage/UFS, USB, display, etc.).
-  Current Mu-Silicium/uefi-sheng tree has limited MediaTek silicon packages (MT6768/MT6789/MediaTekPkg);
-  MT6899 bring-up is not present.
-- Verified memory map (bootloader/DRAM regions, reserved areas) and stack/heap layout.
-- Platform SEC/PEI/DXE libraries and drivers (MemoryMapLib, ConfigurationMapLib, PlatformSecLib, etc.).
+- Re-derive `MT6899Pkg` library bodies (Clock/Gpio/Msdc/Pmic) from the MT6899 TRM; the
+  current bodies are the MT6789 register maps carried over as scaffolding only.
+- Complete the memory map: add the high ~11 GiB DRAM bank (board.toml `dram_size`) and all
+  TEE/ATF/SPM/display carveouts from the bootloader (LK) DRAM table; confirm AP WDT register.
+- Add `ConfigurationMapLib`, fill `rodin.fdf` / `APRIORI.inc` / `DXE.inc` / `RAW.inc`, and
+  `DeviceBuild.py` components (SEC/PEI/DXE) once the MT6899 silicon package is real.
 - Panel/touch/storage/display driver integration and device-specific configuration.
 - BootShim / Android boot image handoff integration as needed for this device.
 
