@@ -47,44 +47,43 @@ Sourced / confirmed:
   `gic-cpu@c400000`, `syscon@10000000` topckgen, `infracfg@1020e000`,
   `emicen@10219000`, `dramc@10230000`, apmixedsys `0x1000c000`, pwrap `0x1000d000`).
 
-High DRAM / firmware carveouts — **blocked on real data**:
+Memory map — **sourced from a live root dump of a booted rodin**:
 
-- board.toml declares `dram_size = 0x300000000` (12 GiB) at base `0x40000000`, i.e.
-  a contiguous `0x40000000..0x340000000` span. Only the low 1 GiB is described by
-  any DTB we have.
-- The vendor DTBs for `vendor_boot`, `dtbo` and `tee` all carry an **empty
-  `/memreserve/`** table, and `gz.img` is the GenieZone hypervisor which computes
-  DRAM size at runtime (`platform_memsize`, `total dram size`).
-- **`lk.img` / `preloader_raw.img` were added and analysed** (MTK `0x58881688`
-  image header; `lk.img` embeds two DTBs — the main rodin DT + a dtbo overlay).
-  They do **not** contain a static absolute memory-layout table: LK computes DRAM
-  size from the preloader `dram_para`/calibration at boot (`Total DRAM = %llx`,
-  `dramc: read size from dram_para`) and allocates every reserved mblock at runtime
-  from DRAM. The vendor-DTB carrier properties give the carveout **sizes** but
-  their address fields are literally `0` (`scp-remap-addr=0`, `sspm-res-ram-start=0`).
-- Sourced carveout **sizes** (from the vendor DTB — real, but bases are runtime):
+- A rooted rodin (model 24129RT7CC, HyperOS 4.0 / Android 17, kernel 6.6.118,
+  KernelSU) was dumped over adb:
+  `/proc/device-tree/memory@40000000` = `0x40000000` + `0x300000000` (12 GiB, one bank),
+  `/proc/device-tree/reserved-memory/*/reg` = the **53 LK mblocks** with their real
+  `base + size`, and `/proc/iomem` = System RAM holes + MMIO ranges. The live DT
+  carries the addresses LK actually programmed (the vendor boot/lk images only
+  carried sizes with address fields zeroed).
+- `MemoryMapLib.c` is generated from this dump as an exact, **non-overlapping**
+  partition of the 12 GiB bank: UEFI stack+FD (`BsData`), all 53 mblocks (`Reserv`),
+  and the remaining free DRAM (`Conv`, ~10.85 GiB). Reserving every mblock is safe:
+  launched after LK those regions belong to ATF/TEE/coprocessors and must not reach
+  the payload; if UEFI replaced LK they are just unused.
 
-  | Region | Size | DTB property |
+  Key carveouts (full 53-entry table lives in `MemoryMapLib.c`):
+
+  | Region | Base | Size |
   |---|---|---|
-  | SCP DRAM | 2 MiB (`0x200000`) | `scp-dram-size` |
-  | SSPM res-RAM | 1.0625 MiB (`0x110000`) | `sspm-res-ram-size` |
-  | VCP DRAM | 8 MiB (`0x800000`) | `vcp-dram-size` |
-  | VCP secure dump | 2 MiB @ +6 MiB | `vcp-secure-dump-size/-offset` |
-  | MCUPM/SSPM/GPUEB met-res-ram | 4 MiB each | `/met/met-res-ram/*` |
-  | SVP / TUI / Prot | 96 / 64 / 32 MiB | `memory-ssmr-features` |
-  | SSMR reserved CMA | 256 MiB (`0x10000000`) | reserved-memory |
-  | CCCI dpmaif cache / nocache | `0x190000` / `0x50000` | reserved-memory |
-  | MKP kernel-code-protection | `0x10000` | reserved-memory |
-  | connected-SCP shm | `0x20000` @ remap-offset `0x2100000` | `/connscp` |
+  | BL31 / ATF | `0x48800000` | 2 MiB |
+  | TEE secmem / reserved / shm | `0xBF800000` / `0xEE200000` / `0x7FA00000` | 5 / 227 / 4 MiB |
+  | GZ (GenieZone) + gz-log | `0x325C00000` | 32 MiB (+0.3) |
+  | SCP / SSPM / MCUPM / VCP | `0xB8000000` / `0x9FD70000` / `0x7FEF0000` / `0xBF000000` | 10 / 2.5 / 1 / 8 MiB |
+  | modem (md_mem ×4, ap_md_*) | `0xCC000000`…`0xE9780000` | ~200 MiB |
+  | ADSP / APU(apusys) | `0x78000000` / `0x8FA00000` | 25 / 6 MiB |
+  | framebuffer / display-dbg | `0xFCC20000` / `0x6CC00000` | 52 / 32 MiB |
+  | security booker / dice | `0x327F70000` | 384 MiB |
+  | wifi dma-pool / connsys EMI | `0x88B00000` / `0x87E00000` | 20 / 13 MiB |
+  | bootmonitor pmsg / pstore | `0x6EC00000` | 4.06 MiB |
 
-  TEE / ATF(BL31) / GZ(GenieZone) / modem sizes and sites are **not** exposed in any
-  of these images.
-- Therefore the remaining 11 GiB is mapped as a single `Reserv` placeholder
-  (`High DRAM Reserve`, `0x80000000` + `0x2C0000000`). It is deliberately **not**
-  handed to the OS: feeding unsourced DRAM to the payload would risk corrupting
-  TEE/ATF. Replace it with the real per-region carveouts (and promote the leftover
-  to `Conv`) once the bootloader **LK "reserved mblock"** table — or `/proc/iomem`
-  / an mrdump from a booted rodin — is available.
+- MMIO corrected against the same dump: **GICD is `0x0C400000`** (not
+  `0x0C000000`), **GICR `0x0C440000`** (+2 MiB), and the **PMIC interface is SPMI
+  `0x1CC04000`**. UART0 `0x11002000`, topckgen `0x10000000`, infracfg-ao
+  `0x10001000`, apmixedsys `0x1000C000`, dramc `0x10230000`, UFS PHY `0x112A0000`,
+  UFS HCI `0x112B0000`, USB0 `0x11200000`, display `0x14000000`, watchdog
+  `0x1C00B000` all confirmed. AP watchdog (`watchdog@1c00b000`, `mediatek,mt6899-wdt`)
+  is present and mapped.
 
 ## Present (in the fork)
 
@@ -102,9 +101,8 @@ High DRAM / firmware carveouts — **blocked on real data**:
 - Re-derive the `MT6899Pkg` library bodies (esp. the ~4k-line `ClockImplLib.c` clock
   tree) from the MT6899 TRM; the current bodies are the MT6789 register maps carried
   over as scaffolding only.
-- Finish the memory map: the high 11 GiB bank and the TEE/ATF/SPM/SSPM/SCP/display
-  carveouts need the bootloader (LK) DRAM table; the low window, bootmonitor carveout
-  and AP watchdog are already sourced (see "Memory map" above).
+- Memory map is **done**: full 12 GiB layout (UEFI + 53 LK mblocks) is sourced from a
+  live root dump and encoded in `MemoryMapLib.c` (see "Memory map" above).
 - Re-derive the `[boot_image]` offsets in `rodin.toml` (dtb/second/tags/ramdisk) from
   the rodin vendor boot config; those are still lancelot placeholders.
 - Drop `MT6358PmicDxe` / replace with the rodin PMIC driver once the PMIC IC is known;
