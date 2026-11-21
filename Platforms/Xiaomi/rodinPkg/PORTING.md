@@ -169,5 +169,49 @@ UEFI runtime cluster (FD, stack 0xA760D000, info block, page tables, log buffer,
 heaps, FV region, UEFI reserve) is carved out of `0xA7000000..0xA8000000` in MemoryMapLib and
 `PcdCPUCoresStackBase` = `0xA760D000`.
 
-Status: builds green; **still needs on-device validation before flashing** (PMIC/clock/UFS
-drivers remain MT6899 scaffolds).
+Status: builds green and boots on hardware to the end of DXE dispatch with a readable
+framebuffer console (see "On-device boot results" below); PMIC/clock/UFS driver bodies
+remain MT6899 scaffolds, so booting an OS is not yet possible.
+
+## On-device boot results (2026-11-21, flashed to `boot_a`)
+
+Flashed with `fastboot flash boot_a Mu-rodin.img` (`fastboot boot` RAM-boot is
+unsupported on rodin: returns `unknown command`). The panel is DRM-only and there is
+no UART, so all feedback comes from the UEFI DEBUG console rendered on screen.
+
+Progression, one CI image per step:
+
+1. The framebuffer memory-map region must be named **`Display Reserved`**:
+   `FrameBufferSerialPortLib` and `SimpleFbDxe` both look it up by name. With the
+   region named `framebuffer` nothing was rendered (blind splash).
+2. The panel reports 1220x2712 but the hardware stride is **4992** (= 1248 * 4);
+   `PcdFrameBufferWidth` must be **1248**, not 1220. At 1220 the console was a skewed
+   colour stripe.
+3. DxeCore needs a **`DXE Heap`** region (`Failed to locate DXE Heap memory region`).
+   Added 124 MiB `DXE Heap` at `0x100000000` carved out of the 3 GiB free System RAM.
+4. Every MMIO region length must be **4 KiB page aligned** for the MMU setup (UFS HCI
+   `0x2A00` -> `0x3000`, WatchDog `0x100` -> `0x1000`); otherwise MMU configuration
+   fails with `EFI_INVALID_PARAMETER`.
+5. The shared MTK DXE drivers look up MMIO by **exact region name**: `GpioDxe` ->
+   `Pinctrl`, `ClockDxe` -> `AP Mixed` / `Top Ck Gen` / `Infra Cfg AO`,
+   `PmicWrapperDxe` -> `PMIC Wrapper`. Our regions were renamed to match
+   (`Pinctrl/GPIO` -> `Pinctrl`, `Infracfg AO` -> `Infra Cfg AO`).
+6. `MsdcDxe` (SD/eMMC) requires **GPIO + Clock + PMIC protocols** in its constructor
+   and `ASSERT`s if any is missing. The PMIC protocol cannot exist yet (see below), so
+   it always asserted. rodin is a UFS device, so the whole SD/eMMC stack
+   (`MsdcDxe`, `EmmcDxe`, `SdDxe`) was dropped from `Include/DXE.inc` and
+   `Include/APRIORI.inc`.
+7. `RamManagerDxe` (Silicium) calls `GetUsableMemoryRanges()`, which looks for a QCOM
+   **`Emi`** memory region (absent on MTK) and then frees an **uninitialised**
+   `EFI_MEMORY_RANGE *` in its `cleanup` path -> `Data abort: Translation fault` at the
+   very end of DXE dispatch. Dropped from `rodin.fdf`; `MemoryMapLib` already describes
+   RAM. `TODO(MT6899)`: add an `Emi` region or fix the upstream uninitialised free if
+   RAM-manager behaviour is ever needed.
+
+Result: the panel shows a readable, correctly pitched UEFI DEBUG console. `GpioDxe`,
+`ClockDxe`, `SimpleFbDxe` (GOP), `ConSplitterDxe`, `GraphicsConsoleDxe`, `SmbiosDxe`,
+`AcpiTableDxe` all load. The only remaining failures are the PMIC wrapper and
+`MT6358PmicDxe`, which fail cleanly: rodin's PMIC is SPMI-only (`spmi@1cc04000`,
+MT6363) and `PmicWrapperImplLib.c` still holds the MT6789 *pwrap* register map, which is
+wrong for rodin. `TODO(MT6899)`: replace it with an SPMI-based MT6363 driver.
+
