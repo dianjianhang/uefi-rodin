@@ -215,3 +215,12 @@ Result: the panel shows a readable, correctly pitched UEFI DEBUG console. `GpioD
 MT6363) and `PmicWrapperImplLib.c` still holds the MT6789 *pwrap* register map, which is
 wrong for rodin. `TODO(MT6899)`: replace it with an SPMI-based MT6363 driver.
 
+### Reached BDS - flash validation passed (2026-11-21, image `aba1cdf9`)
+
+After dropping `RamManagerDxe` (`uefi-sheng` `0acb0613`), the flashed image boots through
+the whole DXE dispatch into **BDS**. The panel shows the **"Project Silicium"** boot logo
+(rendered via `SimpleFbDxe` GOP + `BootGraphicsResourceTableDxe`) and a boot-failure
+banner ("there is no bootable OS on this device..."). No exception dump, no memory-map
+splat. The "no OS" message is expected: no storage driver (UFS) is present yet, so BDS
+correctly finds no boot target. **Flashing to `boot_a` and booting to a visible UEFI
+boot screen now works on hardware.**
